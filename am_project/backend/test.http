@@ -1,0 +1,4 @@
+GET /api/member/checkusername/{username}
+
+###
+POST /api/member
