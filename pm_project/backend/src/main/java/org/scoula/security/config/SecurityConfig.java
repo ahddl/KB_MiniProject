@@ -36,19 +36,25 @@ import org.springframework.web.filter.CorsFilter;
 @MapperScan(basePackages = {"org.scoula.security.account.mapper"})
 @ComponentScan(basePackages = {"org.scoula.security"})
 @RequiredArgsConstructor
+
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     private final UserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final AuthenticationErrorFilter authenticationErrorFilter;
-
     private final CustomAccessDeniedHandler accessDeniedHandler;
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
 
     @Autowired
     private JwtUsernamePasswordAuthenticationFilter jwtUsernamePasswordAuthenticationFilter;
 
-    // 문자셋 필터
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    // 문자셋필터
+    // post방식의 전달시 body에 들어있는 값 한글 인코딩 필터
     public CharacterEncodingFilter encodingFilter() {
         CharacterEncodingFilter encodingFilter = new CharacterEncodingFilter();
         encodingFilter.setEncoding("UTF-8");
@@ -56,15 +62,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         return encodingFilter;
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
     // AuthenticationManager 빈 등록
     @Bean
+//    JWT 방식은 폼로그인과달리Spring Security의기 본인증필터를사용하지않고,
+//    클라이언트→ JWT 토큰→ 커스텀필터
+//    (OncePerRequestFilter 등) → SecurityContext 직접 설정
     public AuthenticationManager authenticationManager() throws Exception {
         return super.authenticationManager();
+
     }
 
     // cross origin 접근 허용
@@ -80,62 +85,63 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         return new CorsFilter(source);
     }
 
-    // 접근 제한 무시 경로 설정 – resource
+    // 접근 제한무시경로설정–resource
     @Override
     public void configure(WebSecurity web) throws Exception {
         web.ignoring().antMatchers(
-                "/assets/**", "/*", "/api/member/**",
-                // Swagger 관련 URL은 보안에서 제외
-                "/swagger-ui.html", "/webjars/**",
-                "/swagger-resources/**", "/v2/api-docs"
+                "/assets/**",
+                "/*",
+//                "/api/member/**",
+                // Swagger 관련url은보안에서제외
+                "/swagger-ui.html", "/webjars/**", "/swagger-resources/**", "/v2/api-docs"
         );
     }
 
     @Override
     public void configure(HttpSecurity http) throws Exception {
-              // 한글 인코딩 필터 설정
-        http.addFilterBefore(encodingFilter(), CsrfFilter.class)
-                //인증 에러 필터
-                .addFilterBefore(authenticationErrorFilter, UsernamePasswordAuthenticationFilter.class)
-                // Jwt 인증 필터
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                //로그인 인증 필터
-                .addFilterBefore(jwtUsernamePasswordAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        http
+                .addFilterBefore(encodingFilter(), CsrfFilter.class)  // 문자 인코딩 필터
+                .addFilterBefore(jwtUsernamePasswordAuthenticationFilter, UsernamePasswordAuthenticationFilter.class) // ③ JWT 로그인 처리
+                .addFilterBefore(jwtAuthenticationFilter, JwtUsernamePasswordAuthenticationFilter.class)              // ② 요청의 헤더에서 토큰 검사
+                .addFilterBefore(authenticationErrorFilter, JwtAuthenticationFilter.class);                           // ① 만료된 토큰 예외 처리
 
-        //예외처리 설정
+
+        http.httpBasic().disable() // 기본 HTTP 인증비활성화
+                .csrf().disable() // CSRF 비활성화
+                .formLogin().disable()  // formLogin 비활성화- 관련 필터 해제
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS); // 세션 생성 모드 설정
+
         http
                 .exceptionHandling()
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler);
 
-//        http
-//                .authorizeRequests() // 경로별 접근 권한 설정
-//                .antMatchers(HttpMethod.OPTIONS).permitAll()
-//                .antMatchers("/api/security/all").permitAll() //모두허용
-//                .antMatchers("/api/security/member").access("hasRole('ROLE_MEMBER')") // ROLE_MEMBER 이상 접근 가능
-//                .antMatchers("/api/security/admin").access("hasRole('ROLE_ADMIN')") //ROLE_ADMIN 이상 접근 허용
-//                .anyRequest().authenticated(); //나머지는 로그인 된 경우 모두 허용
-
-        http.httpBasic().disable() // 기본 HTTP 인증 비활성화
-                .csrf().disable() // CSRF 비활성화
-                .formLogin().disable() // formLogin 비활성화 - 관련 필터 해제
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS); // 세션 생성 모드 설정
-
+        // 인증 요구 경로 설정
         http
-                .authorizeRequests()
+                .authorizeRequests() // 경로별 접근 권한 설정
                 .antMatchers(HttpMethod.OPTIONS).permitAll()
-                // 현재는 모든 접근 허용 (개발 단계)
-                //운영환경에서는 적절한 권한 설정 필요
-                .anyRequest().permitAll();
 
-     }
-    // Authentication Manger 구성
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        auth
-                .userDetailsService(userDetailsService)
-                .passwordEncoder(passwordEncoder());
+                //.anyRequest().authenticated(); // 현재는 모든 접근 허용 (개발 단계) <- 삭제
+
+                // 🌐 회원 관련 공개 API (인증 불필요)
+                .antMatchers(HttpMethod.GET, "/api/member/checkusername/**").permitAll()     // ID 중복 체크
+                .antMatchers(HttpMethod.POST, "/api/member").permitAll()                    // 회원가입
+                .antMatchers(HttpMethod.GET, "/api/member/*/avatar").permitAll()            // 아바타 이미지
+
+                // 🔒 회원 관련 인증 필요 API
+                .antMatchers(HttpMethod.PUT, "/api/member/**").authenticated() // 회원 정보 수정, 비밀번호 변경
+
+                .anyRequest().permitAll(); // 나머지 허용
     }
 
 
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth)
+            throws Exception {
+        log.info("configure .........................................");
+
+        auth.userDetailsService(userDetailsService)
+                .passwordEncoder(passwordEncoder());
+
+    }
 }

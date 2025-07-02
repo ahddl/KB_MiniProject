@@ -1,5 +1,5 @@
 package org.scoula.member.dto;
-//회원정보 응답 DTO
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,7 +14,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class MemberDTO {
+public class MemberDTO { //회원정보 응답 DTO
     private String username;
     private String email;
     private Date regDate;              // 등록일
@@ -22,16 +22,16 @@ public class MemberDTO {
     private MultipartFile avatar;
     private List<String> authList;     // 권한 목록 (join 처리 필요)
 
-    // MemberVO에서 DTO 생성 (정적 팩토리 메서드)
+    // MemberVO 에서 DTO 생성 (정적 팩토리 메서드)
     public static MemberDTO of(MemberVO m) {
         return MemberDTO.builder()
                 .username(m.getUsername())
-                .email(m.getEmail())
-                .regDate(m.getRegDate())
-                .updateDate(m.getUpdateDate())
-                .authList(m.getAuthList().stream()
+        .email(m.getEmail())   //password는 노출되면 안되므로 작성 x
+        .regDate(m.getRegDate())
+        .updateDate(m.getUpdateDate())
+        .authList(m.getAuthList().stream()
                         .map(a -> a.getAuth())
-                        .toList())
-                .build();
+        .toList())
+        .build();
     }
-}
+            }

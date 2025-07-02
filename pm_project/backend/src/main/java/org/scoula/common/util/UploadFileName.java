@@ -1,5 +1,11 @@
 package org.scoula.common.util;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.BufferedOutputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class UploadFileName {
     public static String getUniqueName(String filename) {
 

@@ -27,6 +27,7 @@
 
     <!-- SQL -->
     <!-- 회원 정보 조회 (LEFT JOIN으로 권한 정보 포함) -->
+<!--    LEFT OUTER JOIN 사용으로 권한이 없는 회원도 조회 가능-->
     <select id="get" resultMap="memberMap">
         SELECT m.username, password, email, reg_date, update_date, auth
         FROM tbl_member m
@@ -42,7 +43,7 @@
     <!-- 회원 정보 저장 -->
     <insert id="insert">
         INSERT INTO tbl_member
-        VALUES(#{username}, #{password}, #{email}, now(), now())
+        VALUES(#{username}, #{password}, #{email}, now(), now()) -- now()함수로 현재시간 자동 설정
     </insert>
 
     <!-- 권한 정보 저장 -->
@@ -51,4 +52,21 @@
         VALUES(#{username}, #{auth})
     </insert>
 
+    <!-- 회원 정보 수정-->
+    <update id="update">
+        UPDATE tbl_member
+        SET
+        email = #{email},
+        update_date = now()             <!-- 수정 시간 자동 업데이트 -->
+        WHERE username = #{username}
+    </update>
+
+    <!-- 비밀번호 변경 -->
+    <update id="updatePassword">
+        UPDATE tbl_member
+        SET
+        password = #{newPassword},      <!-- 암호화된 새 비밀번호 -->
+        update_date = now()            <!-- 수정 시간 자동 업데이트 -->
+        WHERE username = #{username}
+    </update>
 </mapper>
